@@ -12,3 +12,4 @@ macro(add_paper_executable NAME SOURCES)
 endmacro()
 
 add_paper_executable(my_main my_main.cc)
+add_paper_executable(test_observer_liars_dice test_observer_liars_dice.cc)

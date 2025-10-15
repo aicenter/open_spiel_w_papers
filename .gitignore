@@ -57,3 +57,10 @@ open_spiel/cmake-build-debug/
 
 # Swift generated build file
 Package.resolved
+
+# SLURM
+slurm*.out
+run_*.sh
+
+# Cursor
+.cache

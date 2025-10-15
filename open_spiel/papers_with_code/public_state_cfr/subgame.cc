@@ -13,11 +13,13 @@
 // limitations under the License.
 
 
+#include "games/liars_dice.h"
 #include "open_spiel/abseil-cpp/absl/hash/hash.h"
 #include "open_spiel/papers_with_code/public_state_cfr/subgame.h"
 #include "open_spiel/algorithms/bandits.h"
 #include "open_spiel/algorithms/bandits_policy.h"
 #include "open_spiel/utils/format_observation.h"
+#include "spiel_utils.h"
 
 namespace open_spiel {
 namespace papers_with_code {
@@ -329,6 +331,14 @@ std::shared_ptr<PublicStateEvaluator> MakePokerTerminalEvaluatorQuadratic(algori
   return std::make_shared<PokerTerminalEvaluatorQuadratic>(std::move(poker_data), std::move(cards));
 }
 
+std::shared_ptr<PublicStateEvaluator> MakeGoofspielTerminalEvaluator() {
+  return std::make_shared<GoofspielTerminalEvaluator>();
+}
+
+std::shared_ptr<PublicStateEvaluator> MakeLiarsDiceTerminalEvaluator() {
+  return std::make_shared<LiarsDiceTerminalEvaluator>();
+}
+
 std::shared_ptr<PublicStateEvaluator> MakeTerminalEvaluator() {
   return std::make_shared<TerminalEvaluator>();
 }
@@ -467,6 +477,41 @@ GeneralPokerTerminalPublicStateContext::GeneralPokerTerminalPublicStateContext(c
   }
 }
 
+LiarsDicePublicStateContext::LiarsDicePublicStateContext(const PublicState &state) {
+  const auto &liars_dice_state =
+      open_spiel::down_cast<const liars_dice::LiarsDiceState &>(*state.nodes[0][0]->corresponding_states()[0]);
+  const auto &liars_dice_game =
+      open_spiel::down_cast<const liars_dice::LiarsDiceGame &>(*liars_dice_state.GetGame());
+
+  bid_ = liars_dice_state.UnrankBid(liars_dice_state.last_bid());
+
+  SPIEL_CHECK_TRUE(state.IsTerminal());
+  auto &leaf_nodes = state.nodes;
+  SPIEL_CHECK_EQ(leaf_nodes[0].size(), leaf_nodes[1].size());
+
+  const int num_terminals = leaf_nodes[0].size();
+  utilities_.resize(2);
+  face_groups_.resize(liars_dice_game.num_dice()[0] + 1);
+
+
+  for (int i = 0; i < num_terminals; ++i) {
+    std::vector<int> roll = algorithms::IndexToRoll(i, liars_dice_game.num_dice()[0], liars_dice_state.dice_sides());
+    int num_correct_faces = 0;
+    for (int face : roll) {
+      if (face == bid_.second || face == liars_dice_state.dice_sides()) {
+        num_correct_faces++;
+      }
+    }
+    face_groups_[num_correct_faces].push_back(i);
+  } 
+  for(int pl = 0; pl < 2; pl++) {
+    const algorithms::InfostateNode *leaf = leaf_nodes[pl][0];
+    const double v = leaf->terminal_utility();
+    const double chn = leaf->terminal_chance_reach_prob();
+    utilities_[pl] = v * chn;
+  }
+}
+
 void GeneralPokerTerminalEvaluatorLinear::EvaluatePublicState(PublicState *state, PublicStateContext *context) const {
   auto *general_poker_context_high = open_spiel::down_cast<GeneralPokerTerminalPublicStateContext *>(context);
 
@@ -590,6 +635,31 @@ PokerTerminalPublicStateContext::PokerTerminalPublicStateContext(const PublicSta
     const double v = leaf->terminal_utility();
     const double chn = leaf->terminal_chance_reach_prob();
     utilities_.push_back(v * chn);
+  }
+}
+
+// River specific evaluators
+GoofspielPublicStateContext::GoofspielPublicStateContext(const PublicState &state) {
+  SPIEL_CHECK_TRUE(state.IsTerminal());
+  auto &leaf_nodes = state.nodes;
+
+  for(int pl = 0; pl < 2; pl++) {
+    const int num_terminals = leaf_nodes[pl].size();
+    
+    utilities_.push_back(std::vector<double>(num_terminals));
+    belief_map_.push_back(std::vector<std::vector<int>>(num_terminals));
+
+    for (int i = 0; i < num_terminals; ++i) {
+      const algorithms::InfostateNode *leaf = leaf_nodes[pl][i];
+      const double v = leaf->terminal_utility();
+      const double chn = leaf->terminal_chance_reach_prob();
+      utilities_[pl][i] = v * chn;
+      for(int j = 0; j < leaf_nodes[1-pl].size(); j++) {
+        if(leaf_nodes[1-pl][j]->has_opponent_infostate_string(leaf->infostate_string())) {
+          belief_map_[pl][i].push_back(j);
+        }
+      }
+    }
   }
 }
 
@@ -891,6 +961,60 @@ void TerminalEvaluator::EvaluatePublicState(
     state->values[1][j] = -terminal->utilities[i] * state->beliefs[0][i];
   }
 }
+
+std::unique_ptr<PublicStateContext> GoofspielTerminalEvaluator::CreateContext(
+  const PublicState &state) const {
+return std::make_unique<GoofspielPublicStateContext>(state);
+}
+
+std::unique_ptr<PublicStateContext> LiarsDiceTerminalEvaluator::CreateContext(
+  const PublicState &state) const {
+return std::make_unique<LiarsDicePublicStateContext>(state);
+}
+
+void GoofspielTerminalEvaluator::EvaluatePublicState(
+  PublicState *state, PublicStateContext *context) const {
+auto *terminal = open_spiel::down_cast<GoofspielPublicStateContext *>(context);
+  for (int pl = 0; pl < 2; pl++) {
+    for (int i = 0; i < state->values[pl].size(); ++i) {
+      double belief = 0;
+      for (int j : terminal->belief_map_[pl][i]) {
+        belief += state->beliefs[1-pl][j];
+      }
+      state->values[pl][i] = terminal->utilities_[pl][i] * belief;
+    }
+  }
+}
+
+void LiarsDiceTerminalEvaluator::EvaluatePublicState(
+  PublicState *state, PublicStateContext *context) const {
+auto *terminal = open_spiel::down_cast<LiarsDicePublicStateContext *>(context);
+  std::vector<std::vector<double>> face_beliefs(2, std::vector<double>(terminal->face_groups_.size(), 0));
+  // Accumulate beliefs for each face group
+  for (int pl = 0; pl < 2; pl++) {
+    for (int face_group_index = 0; face_group_index < terminal->face_groups_.size(); ++face_group_index) {
+      for(int roll_index : terminal->face_groups_[face_group_index]) {
+        face_beliefs[pl][face_group_index] += state->beliefs[pl][roll_index];
+      }
+    }
+  }
+  // Compute values for each face group
+  for (int pl = 0; pl < 2; pl++) {
+    for (int face_group_index = 0; face_group_index < terminal->face_groups_.size(); ++face_group_index) {
+      for(int roll_index : terminal->face_groups_[face_group_index]) {
+        state->values[pl][roll_index] = 0.0;
+        for(int face_belief_index = 0; face_belief_index < face_beliefs[1-pl].size(); ++face_belief_index) {
+          if(face_belief_index + face_group_index >= terminal->bid_.first) {
+            state->values[pl][roll_index] += terminal->utilities_[pl] * face_beliefs[1-pl][face_belief_index];
+          } else {
+            state->values[pl][roll_index] -= terminal->utilities_[pl] * face_beliefs[1-pl][face_belief_index];
+          }
+        }
+      }
+    }
+  }
+}
+
 
 SubgameSolver::SubgameSolver(
     std::shared_ptr<Subgame> subgame,
@@ -1239,7 +1363,7 @@ std::unique_ptr<PublicStateContext> CFREvaluator::CreateContext(
   if (!state.IsLeaf()) return nullptr;
   SPIEL_CHECK_TRUE(state.IsLeaf());
 
-  auto subgame_trees = std::vector{
+  auto subgame_trees = std::vector<std::shared_ptr<algorithms::InfostateTree>>{
       MakeInfostateTree(state.nodes[0],
                         depth_limit, kDlCfrInfostateTreeStorage),
       MakeInfostateTree(state.nodes[1],
