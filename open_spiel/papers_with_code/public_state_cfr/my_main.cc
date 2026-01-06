@@ -522,7 +522,6 @@ std::pair<int, int> GoofspielOpenSpielGamePscfr(int iterations,
 
   auto fixed_policy = solver.AveragePolicy();
 
-
   if (run_exploitability) {
     double exploitability = algorithms::Exploitability(*game, *fixed_policy);
     std::cout << "Exploitability: " << exploitability << "\n";
