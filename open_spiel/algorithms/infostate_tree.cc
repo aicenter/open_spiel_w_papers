@@ -507,21 +507,22 @@ void InfostateTree::BuildTerminalEfficientNode(
     double chance_reach_prob, std::string last_infostate,
     std::string last_infostate_opponent) {
 
-  auto terminal_node = parent->GetChild(last_infostate);
-
+  std::string infostate_string = infostate_observer_->StringFrom(state, acting_player_);
+  std::string opponent_infostate_string = infostate_observer_->StringFrom(state, 1 - acting_player_);
+  auto terminal_node = parent->GetChild(infostate_string);
+  
   if (!terminal_node) {
     InfostateNode *terminal_node = parent->AddChild(MakeNode(
         parent, kTerminalInfostateNode,
-        infostate_observer_->StringFrom(state, acting_player_),
+        infostate_string,
         state.Returns()[acting_player_], chance_reach_prob, depth, &state));
     UpdateLeafNode(depth);
     AddCorrespondingState(terminal_node, state, chance_reach_prob);
-    terminal_node->add_opponent_infostate_string(last_infostate_opponent);
+    terminal_node->add_opponent_infostate_string(opponent_infostate_string);
   } else {
-    terminal_node->increment_terminal_chance_reach_prob(chance_reach_prob);
     SPIEL_CHECK_EQ(state.Returns()[acting_player_],
                    terminal_node->terminal_utility());
-    terminal_node->add_opponent_infostate_string(last_infostate_opponent);
+    terminal_node->add_opponent_infostate_string(opponent_infostate_string);
   }
 }
 
@@ -681,7 +682,7 @@ void InfostateTree::BuildObservationEfficientNode(
 void InfostateTree::RecursivelyBuildLiarsDiceTree(
     const std::vector<InfostateNode *> &parents, size_t depth,
     const State &state, const std::vector<double> &chance_reach_probs,
-    int num_dice, int dice_sides) {
+    std::vector<std::string> roll_strings) {
   // If we are building safe resolving trees, we have to add additional
   // nodes before going into the actual nodes.
   if (is_resolving_tree_ and depth == 1) {
@@ -689,13 +690,13 @@ void InfostateTree::RecursivelyBuildLiarsDiceTree(
   }
   if (state.IsTerminal()) {
     BuildTerminalLiarsDiceNodes(parents, depth, state, chance_reach_probs,
-                                num_dice, dice_sides);
+                                roll_strings);
   } else if (state.IsPlayerActing(acting_player_)) {
     BuildDecisionLiarsDiceNodes(parents, depth, state, chance_reach_probs,
-                                num_dice, dice_sides);
+                                roll_strings);
   } else {
     BuildObservationLiarsDiceNodes(parents, depth, state, chance_reach_probs,
-                                   num_dice, dice_sides);
+                                   roll_strings);
   }
 }
 
@@ -711,7 +712,7 @@ std::vector<int> IndexToRoll(int roll_index, int num_dice, int dice_sides) {
 void InfostateTree::BuildTerminalLiarsDiceNodes(
     const std::vector<InfostateNode *> &parents, size_t depth,
     const State &state, const std::vector<double> &chance_reach_probs,
-    int num_dice, int dice_sides) {
+    std::vector<std::string> roll_strings) {
   // Get poker state
   auto liars_dice_state =
       down_cast<const open_spiel::liars_dice::LiarsDiceState &>(
@@ -720,13 +721,12 @@ void InfostateTree::BuildTerminalLiarsDiceNodes(
   int utility = liars_dice_state.calling_player() == acting_player_ ? -1 : 1;
 
   std::string bid_sequence =
-      infostate_observer_->StringFrom(state, acting_player_).substr(num_dice);
-  int num_possible_rolls = num_dice * dice_sides;
+      infostate_observer_->StringFrom(state, acting_player_).substr(roll_strings[0].size());
 
-  for (int roll_index = 0; roll_index < num_possible_rolls; roll_index++) {
+  for (int roll_index = 0; roll_index < roll_strings.size(); roll_index++) {
     InfostateNode *node = parents[roll_index]->AddChild(MakeNode(
         parents[roll_index], kTerminalInfostateNode,
-        absl::StrCat(absl::StrJoin(IndexToRoll(roll_index, num_dice, dice_sides), ""), bid_sequence),
+        absl::StrCat(roll_strings[roll_index], bid_sequence),
         utility, chance_reach_probs[roll_index], depth, &state));
     AddPokerCorrespondingState(node, state, chance_reach_probs[roll_index]);
   }
@@ -737,20 +737,18 @@ void InfostateTree::BuildTerminalLiarsDiceNodes(
 void InfostateTree::BuildDecisionLiarsDiceNodes(
     const std::vector<InfostateNode *> &parents, size_t depth,
     const State &state, const std::vector<double> &chance_reach_probs,
-    int num_dice, int dice_sides) {
+    std::vector<std::string> roll_strings) {
 
   std::string bid_sequence =
-      infostate_observer_->StringFrom(state, acting_player_).substr(num_dice);
+      infostate_observer_->StringFrom(state, acting_player_).substr(roll_strings[0].size());
 
   std::vector<InfostateNode *> new_parents;
-  int num_possible_rolls = num_dice * dice_sides;
-  new_parents.reserve(num_possible_rolls);
+  new_parents.reserve(roll_strings.size());
 
-  for (int roll_index = 0; roll_index < num_possible_rolls; roll_index++) {
-    std::vector<int> roll = IndexToRoll(roll_index, num_dice, dice_sides);
+  for (int roll_index = 0; roll_index < roll_strings.size(); roll_index++) {
     new_parents.push_back(parents[roll_index]->AddChild(
         MakeNode(parents[roll_index], kDecisionInfostateNode,
-                 absl::StrCat(absl::StrJoin(roll, ""), bid_sequence),
+                 roll_strings[roll_index] + bid_sequence,
                  /*terminal_utility=*/NAN, chance_reach_probs[roll_index],
                  depth, &state)));
     AddPokerCorrespondingState(new_parents.back(), state,
@@ -758,28 +756,26 @@ void InfostateTree::BuildDecisionLiarsDiceNodes(
   }
   for (Action action : state.LegalActions()) {
     RecursivelyBuildLiarsDiceTree(new_parents, depth + 1, *state.Child(action),
-                                  chance_reach_probs, num_dice, dice_sides);
+                                  chance_reach_probs, roll_strings);
   }
 }
 
 void InfostateTree::BuildObservationLiarsDiceNodes(
     const std::vector<InfostateNode *> &parents, size_t depth,
     const State &state, const std::vector<double> &chance_reach_probs,
-    int num_dice, int dice_sides) {
+    std::vector<std::string> roll_strings) {
   SPIEL_DCHECK_TRUE(!state.IsPlayerActing(acting_player_));
 
   std::string bid_sequence =
-      infostate_observer_->StringFrom(state, acting_player_).substr(num_dice);
+      infostate_observer_->StringFrom(state, acting_player_).substr(roll_strings[0].size());
 
-  int num_possible_rolls = num_dice * dice_sides;
   std::vector<InfostateNode *> new_parents;
-  new_parents.reserve(num_possible_rolls);
+  new_parents.reserve(roll_strings.size());
 
-  for (int roll_index = 0; roll_index < num_possible_rolls; roll_index++) {
-    std::vector<int> roll = IndexToRoll(roll_index, num_dice, dice_sides);
+  for (int roll_index = 0; roll_index < roll_strings.size(); roll_index++) {
     new_parents.push_back(parents[roll_index]->AddChild(
         MakeNode(parents[roll_index], kObservationInfostateNode,
-                 absl::StrCat(absl::StrJoin(roll, ""), bid_sequence),
+                 roll_strings[roll_index] + bid_sequence,
                  /*terminal_utility=*/NAN, chance_reach_probs[roll_index],
                  depth, &state)));
     AddPokerCorrespondingState(new_parents.back(), state,
@@ -788,7 +784,7 @@ void InfostateTree::BuildObservationLiarsDiceNodes(
   for (Action a : state.LegalActions()) {
     std::unique_ptr<State> child = state.Child(a);
     RecursivelyBuildLiarsDiceTree(new_parents, depth + 1, *child,
-                                  chance_reach_probs, num_dice, dice_sides);
+                                  chance_reach_probs, roll_strings);
   }
 }
 
@@ -1339,6 +1335,7 @@ void InfostateTree::LabelNodesWithIds() {
       if (node->type() != kDecisionInfostateNode)
         continue;
       decision_infostates_.push_back(node);
+      decision_infostates_map_[node->infostate_string()] = node;
       node->decision_id_ = DecisionId(decision_index++, this);
 
       for (InfostateNode *child : node->child_iterator()) {
@@ -1489,20 +1486,18 @@ double InfostateTree::BestResponseValue(LeafVector<double> &&gradient) const {
 
 DecisionId InfostateTree::DecisionIdFromInfostateString(
     const std::string &infostate_string) const {
-  for (InfostateNode *node : decision_infostates_) {
-    if (node->infostate_string() == infostate_string)
-      return node->decision_id();
-  }
-  return kUndefinedDecisionId;
+      if(decision_infostates_map_.find(infostate_string) != decision_infostates_map_.end()) {
+        return decision_infostates_map_.at(infostate_string)->decision_id();
+      }
+      return kUndefinedDecisionId;
 }
 
 const InfostateNode *InfostateTree::DecisionNodeFromInfostateString(
     const std::string &infostate_string) const {
-  for (InfostateNode *node : decision_infostates_) {
-    if (node->infostate_string() == infostate_string)
-      return node;
-  }
-  return nullptr;
+      if(decision_infostates_map_.find(infostate_string) != decision_infostates_map_.end()) {
+        return decision_infostates_map_.at(infostate_string);
+      }
+      return nullptr;
 }
 
 bool CheckSum(const SfStrategy &strategy, SequenceId id, double expected_sum) {

@@ -16,6 +16,7 @@
 #define OPEN_SPIEL_ALGORITHMS_INFOSTATE_TREE_H_
 
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -649,14 +650,32 @@ MakeLiarsDiceInfostateTrees(const std::unique_ptr<State> &start_state,
           down_cast<const liars_dice::LiarsDiceGame &>(*start_state->GetGame());
       int num_dice = liars_dice_game.num_dice()[acting_player];
       int dice_sides = liars_dice_game.dice_sides();
-      int num_possible_rolls = dice_sides * num_dice;
+      int num_possible_rolls = pow(dice_sides, num_dice);
+      std::unordered_map<std::string, int> roll_counts;
+      std::vector<std::string> roll_strings;
+      for (int i = 0; i < num_possible_rolls; i++) {
+        std::vector<int> roll = IndexToRoll(i, num_dice, dice_sides);
+        // std::sort(roll.begin(), roll.end());
+        std::string roll_string = absl::StrJoin(roll, "");
+        if (roll_counts.find(roll_string) == roll_counts.end()) {
+          roll_strings.push_back(roll_string);
+        }
+        roll_counts[roll_string]++;
+      }
 
-      std::vector<double> chance_reach_probs(
-          num_possible_rolls, chance_reach_prob / (num_possible_rolls * num_possible_rolls));
+      std::cout << "roll_strings: " << absl::StrJoin(roll_strings, ", ") << std::endl;
+
+      std::vector<double> chance_reach_probs(roll_strings.size(), 0);
+
+      for (int i = 0; i < roll_strings.size(); i++) {
+        chance_reach_probs[i] = static_cast<double>(roll_counts[roll_strings[i]]) / num_possible_rolls;
+      }
+
+      std::cout << "chance_reach_probs: " << absl::StrJoin(chance_reach_probs, ", ") << std::endl;
 
       RecursivelyBuildLiarsDiceTree(
-          std::vector<InfostateNode *>(num_possible_rolls, root_.get()),
-          /*depth=*/1, *start_state, chance_reach_probs, num_dice, dice_sides);
+          std::vector<InfostateNode *>(roll_strings.size(), root_.get()),
+          /*depth=*/1, *start_state, chance_reach_probs, roll_strings);
 
       // Operations to make after building the tree.
       RebalanceTree();
@@ -755,6 +774,7 @@ MakeLiarsDiceInfostateTrees(const std::unique_ptr<State> &start_state,
 
     // Tree structure collections that index the respective NodeIds.
     std::vector<InfostateNode *> decision_infostates_;
+    std::unordered_map<std::string, InfostateNode *> decision_infostates_map_;
     std::vector<InfostateNode *> sequences_;
     // The last vector corresponds to the leaf nodes.
     std::vector<std::vector<InfostateNode *>> nodes_at_depths_;
@@ -857,21 +877,21 @@ MakeLiarsDiceInfostateTrees(const std::unique_ptr<State> &start_state,
 
     void RecursivelyBuildLiarsDiceTree(
         const std::vector<InfostateNode *> &parents, size_t depth,
-        const State &state, const std::vector<double> &chance_reach_probs, int num_dice, int dice_sides);
+        const State &state, const std::vector<double> &chance_reach_probs, std::vector<std::string> roll_strings);
 
     void
     BuildTerminalLiarsDiceNodes(const std::vector<InfostateNode *> &parents,
                                 size_t depth, const State &state,
-                                const std::vector<double> &chance_reach_probs, int num_dice, int dice_sides);
+                                const std::vector<double> &chance_reach_probs, std::vector<std::string> roll_strings);
 
     void
     BuildDecisionLiarsDiceNodes(const std::vector<InfostateNode *> &parents,
                                 size_t depth, const State &state,
-                                const std::vector<double> &chance_reach_probs, int num_dice, int dice_sides);
+                                const std::vector<double> &chance_reach_probs, std::vector<std::string> roll_strings);
 
     void BuildObservationLiarsDiceNodes(
         const std::vector<InfostateNode *> &parents, size_t depth,
-        const State &state, const std::vector<double> &chance_reach_probs, int num_dice, int dice_sides);
+        const State &state, const std::vector<double> &chance_reach_probs, std::vector<std::string> roll_strings);
 
     void CollectNodesAtDepth(InfostateNode *node, size_t depth);
     void LabelNodesWithIds();
@@ -1008,6 +1028,9 @@ MakeLiarsDiceInfostateTrees(const std::unique_ptr<State> &start_state,
     bool has_infostate_string() const {
       return infostate_string_ != kFillerInfostate &&
              infostate_string_ != kDummyRootNodeInfostate;
+    }
+    const std::unordered_set<std::string> &opponent_infostate_strings() const {
+      return opponent_infostate_strings_;
     }
     const std::string &infostate_string() const {
       // Avoid working with empty infostate strings.
