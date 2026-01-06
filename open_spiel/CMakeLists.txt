@@ -3,6 +3,12 @@
 cmake_minimum_required (VERSION 3.12)
 project (open_spiel)
 
+if(CMAKE_BUILD_TYPE STREQUAL "Profile")
+    message(STATUS "Profiling build: enabling -pg")
+    add_compile_options(-pg)
+    add_link_options(-pg)
+endif()
+
 # Uncomment for detailed compilation messages.
 # set(CMAKE_VERBOSE_MAKEFILE ON)
 
