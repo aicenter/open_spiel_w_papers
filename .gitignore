@@ -64,3 +64,6 @@ run_*.sh
 
 # Cursor
 .cache
+
+# Analysis
+analysis*.txt
