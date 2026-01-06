@@ -108,17 +108,7 @@ std::pair<std::shared_ptr<Subgame>, algorithms::PokerData> MakeSubgame(std::stri
                         infostate_observer, 1000,
                         kDlCfrInfostateTreeStorage, cards);
 
-  std::cout << "Tree one:" << std::endl;
-  std::cout << "Num decisions:" << trees[0]->num_decisions() << std::endl;
-  std::cout << "Num sequences:" << trees[0]->num_sequences() << std::endl;
-
-  std::cout << "Tree two:" << std::endl;
-  std::cout << "Num decisions:" << trees[1]->num_decisions() << std::endl;
-  std::cout << "Num sequences:" << trees[1]->num_sequences() << std::endl;
-
   auto out = std::make_shared<Subgame>(game, public_observer, trees);
-
-  std::cout << "Num public states:" << out->public_states.size() << std::endl;
 
   std::shared_ptr<const PublicStateEvaluator> terminal_evaluator =
   std::make_shared<const PokerTerminalEvaluatorQuadratic>(poker_data,
@@ -426,17 +416,7 @@ std::pair<int, int> LiarsDiceOpenSpielGamePscfr(int iterations,
                                               infostate_observer, 1000000,
                                               kDlCfrInfostateTreeStorage);
 
-  std::cout << "Tree one:" << std::endl;
-  std::cout << "Num decisions:" << trees[0]->num_decisions() << std::endl;
-  std::cout << "Num sequences:" << trees[0]->num_sequences() << std::endl;
-
-  std::cout << "Tree two:" << std::endl;
-  std::cout << "Num decisions:" << trees[1]->num_decisions() << std::endl;
-  std::cout << "Num sequences:" << trees[1]->num_sequences() << std::endl;
-
   auto out = std::make_shared<Subgame>(game, public_observer, trees);
-
-  std::cout << "Num public states:" << out->public_states.size() << std::endl;
 
   std::shared_ptr<const PublicStateEvaluator> terminal_evaluator =
       MakeLiarsDiceTerminalEvaluator();
@@ -478,17 +458,7 @@ std::pair<int, int> OpenSpielGamePscfrVanilla(int iterations,
       algorithms::MakeInfostateTrees(*game, 1000000,
                                      kDlCfrInfostateTreeStorage);
 
-  std::cout << "Tree one:" << std::endl;
-  std::cout << "Num decisions:" << trees[0]->num_decisions() << std::endl;
-  std::cout << "Num sequences:" << trees[0]->num_sequences() << std::endl;
-
-  std::cout << "Tree two:" << std::endl;
-  std::cout << "Num decisions:" << trees[1]->num_decisions() << std::endl;
-  std::cout << "Num sequences:" << trees[1]->num_sequences() << std::endl;
-
   auto out = std::make_shared<Subgame>(game, public_observer, trees);
-
-  std::cout << "Num public states:" << out->public_states.size() << std::endl;
 
   std::shared_ptr<const PublicStateEvaluator> terminal_evaluator =
       MakeTerminalEvaluator();
@@ -531,17 +501,7 @@ std::pair<int, int> GoofspielOpenSpielGamePscfr(int iterations,
                                               infostate_observer, 1000000,
                                               kDlCfrInfostateTreeStorage);
 
-  std::cout << "Tree one:" << std::endl;
-  std::cout << "Num decisions:" << trees[0]->num_decisions() << std::endl;
-  std::cout << "Num sequences:" << trees[0]->num_sequences() << std::endl;
-
-  std::cout << "Tree two:" << std::endl;
-  std::cout << "Num decisions:" << trees[1]->num_decisions() << std::endl;
-  std::cout << "Num sequences:" << trees[1]->num_sequences() << std::endl;
-
   auto out = std::make_shared<Subgame>(game, public_observer, trees);
-
-  std::cout << "Num public states:" << out->public_states.size() << std::endl;
 
   std::shared_ptr<const PublicStateEvaluator> terminal_evaluator =
       MakeGoofspielTerminalEvaluator();

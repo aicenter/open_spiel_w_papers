@@ -208,8 +208,6 @@ CFRSolverBase::CFRSolverBase(const Game &game, bool alternating_updates,
   }
   cfr_root_state_ = std::make_shared<CfrState>(*root_state_);
   InitializeInfostateNodes(*root_state_, *cfr_root_state_);
- std::cout << "Game has " << states_ << " states.\n";
- std::cout << "Game has " << InfoStateValuesTable().size() << " infostates." << std::endl;
 }
 
 CFRSolverBase::CFRSolverBase(std::shared_ptr<const Game> game,
