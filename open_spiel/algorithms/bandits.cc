@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "open_spiel/algorithms/bandits.h"
+#include <cstdlib>
 
 namespace open_spiel {
 namespace algorithms {
@@ -142,6 +143,9 @@ void RegretMatchingPlus::ObserveRewards(absl::Span<const double> rewards) {
   for (int i = 0; i < num_actions(); ++i) {
     cumulative_regrets_[i] =
         std::fmax(0, cumulative_regrets_[i] + rewards[i] - expected_reward);
+    if(std::abs(cumulative_regrets_[i]) < 1e-12) {
+      cumulative_regrets_[i] = 0;
+    }
   }
 }
 
