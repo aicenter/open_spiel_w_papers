@@ -172,6 +172,7 @@ struct Subgame {
   std::shared_ptr<Observer> public_observer;
   std::vector<std::shared_ptr<algorithms::InfostateTree>> trees;
   std::vector<PublicState> public_states;
+  std::unordered_map<std::string, int> public_state_id_map;
 
   Subgame(std::shared_ptr<const Game> game, int max_moves);
   Subgame(std::shared_ptr<const Game> game,
@@ -188,7 +189,7 @@ struct Subgame {
  private:
   void MakePublicStates();
   void MakeBeliefsAndValues();
-  PublicState* GetPublicState(const Observation& public_observation,
+  PublicState* GetPublicState(const std::string &public_observation_string, const Observation& public_observation,
                               PublicStateType state_type);
   PublicState* GetPublicState(Observation& public_observation,
                               PublicStateType state_type,

@@ -254,9 +254,8 @@ PublicState *Subgame::GetPublicState(Observation &public_observation,
   SPIEL_CHECK_FALSE(node->corresponding_states().empty());
   const std::unique_ptr<State> &some_state = node->corresponding_states()[0];
   public_observation.SetFrom(*some_state, kDefaultPlayerId);
-  SPIEL_DCHECK_TRUE(DoStatesProduceEqualPublicObservations(
-      *game, public_observer, *node, public_observation.Tensor()));
-  PublicState *state = GetPublicState(public_observation, state_type);
+  std::string public_observation_string = public_observation.StringFrom(*some_state, kDefaultPlayerId);
+  PublicState *state = GetPublicState(public_observation_string, public_observation, state_type);
   if (state->move_number == -1) {
     state->move_number = some_state->MoveNumber();
   } else {
@@ -265,14 +264,14 @@ PublicState *Subgame::GetPublicState(Observation &public_observation,
   return state;
 }
 
-PublicState *Subgame::GetPublicState(const Observation &public_observation,
+PublicState *Subgame::GetPublicState(const std::string &public_observation_string, const Observation& public_observation,
                                      PublicStateType state_type) {
-  for (PublicState &state : public_states) {
-    if (state.public_tensor == public_observation
-        && state.state_type == state_type)
-      return &state;
+  if (public_state_id_map.find(public_observation_string) != public_state_id_map.end()) {
+    return &public_states[public_state_id_map.at(public_observation_string)];
   }
+
   // None found: create and return the pointer.
+  public_state_id_map[public_observation_string] = public_states.size();
   public_states.emplace_back(public_observation,
                              state_type, public_states.size());
   public_states.back().trees = trees;
@@ -478,12 +477,12 @@ GeneralPokerTerminalPublicStateContext::GeneralPokerTerminalPublicStateContext(c
 }
 
 LiarsDicePublicStateContext::LiarsDicePublicStateContext(const PublicState &state) {
-  const auto &liars_dice_state =
+  const auto &liars_dice_some_state =
       open_spiel::down_cast<const liars_dice::LiarsDiceState &>(*state.nodes[0][0]->corresponding_states()[0]);
   const auto &liars_dice_game =
-      open_spiel::down_cast<const liars_dice::LiarsDiceGame &>(*liars_dice_state.GetGame());
+      open_spiel::down_cast<const liars_dice::LiarsDiceGame &>(*liars_dice_some_state.GetGame());
 
-  bid_ = liars_dice_state.UnrankBid(liars_dice_state.last_bid());
+  bid_ = liars_dice_some_state.UnrankBid(liars_dice_some_state.last_bid());
 
   SPIEL_CHECK_TRUE(state.IsTerminal());
   auto &leaf_nodes = state.nodes;
@@ -495,15 +494,19 @@ LiarsDicePublicStateContext::LiarsDicePublicStateContext(const PublicState &stat
 
 
   for (int i = 0; i < num_terminals; ++i) {
-    std::vector<int> roll = algorithms::IndexToRoll(i, liars_dice_game.num_dice()[0], liars_dice_state.dice_sides());
+    std::string roll_string = leaf_nodes[0][i]->infostate_string().substr(0, liars_dice_game.num_dice()[0]);
+    std::vector<int> roll;    
+    for(int j = 0; j < roll_string.size(); j++) {
+      roll.push_back(roll_string[j] - '0');
+    }
     int num_correct_faces = 0;
     for (int face : roll) {
-      if (face == bid_.second || face == liars_dice_state.dice_sides()) {
+      if (face == bid_.second || face == liars_dice_game.dice_sides()) {
         num_correct_faces++;
       }
     }
     face_groups_[num_correct_faces].push_back(i);
-  } 
+  }
   for(int pl = 0; pl < 2; pl++) {
     const algorithms::InfostateNode *leaf = leaf_nodes[pl][0];
     const double v = leaf->terminal_utility();
@@ -645,19 +648,23 @@ GoofspielPublicStateContext::GoofspielPublicStateContext(const PublicState &stat
 
   for(int pl = 0; pl < 2; pl++) {
     const int num_terminals = leaf_nodes[pl].size();
+    const int num_opponent_terminals = leaf_nodes[1-pl].size();
     
     utilities_.push_back(std::vector<double>(num_terminals));
     belief_map_.push_back(std::vector<std::vector<int>>(num_terminals));
+
+    std::unordered_map<std::string, int> infostate_string_to_index;
+    for(int i = 0; i < num_opponent_terminals; i++) {
+      infostate_string_to_index[leaf_nodes[1-pl][i]->infostate_string()] = i;
+    }
 
     for (int i = 0; i < num_terminals; ++i) {
       const algorithms::InfostateNode *leaf = leaf_nodes[pl][i];
       const double v = leaf->terminal_utility();
       const double chn = leaf->terminal_chance_reach_prob();
       utilities_[pl][i] = v * chn;
-      for(int j = 0; j < leaf_nodes[1-pl].size(); j++) {
-        if(leaf_nodes[1-pl][j]->has_opponent_infostate_string(leaf->infostate_string())) {
-          belief_map_[pl][i].push_back(j);
-        }
+      for(const std::string &opponent_infostate_string : leaf->opponent_infostate_strings()) {
+        belief_map_[pl][i].push_back(infostate_string_to_index[opponent_infostate_string]);
       }
     }
   }
@@ -974,7 +981,7 @@ return std::make_unique<LiarsDicePublicStateContext>(state);
 
 void GoofspielTerminalEvaluator::EvaluatePublicState(
   PublicState *state, PublicStateContext *context) const {
-auto *terminal = open_spiel::down_cast<GoofspielPublicStateContext *>(context);
+  auto *terminal = open_spiel::down_cast<GoofspielPublicStateContext *>(context);
   for (int pl = 0; pl < 2; pl++) {
     for (int i = 0; i < state->values[pl].size(); ++i) {
       double belief = 0;
@@ -988,8 +995,10 @@ auto *terminal = open_spiel::down_cast<GoofspielPublicStateContext *>(context);
 
 void LiarsDiceTerminalEvaluator::EvaluatePublicState(
   PublicState *state, PublicStateContext *context) const {
-auto *terminal = open_spiel::down_cast<LiarsDicePublicStateContext *>(context);
+  auto *terminal = open_spiel::down_cast<LiarsDicePublicStateContext *>(context);
+  
   std::vector<std::vector<double>> face_beliefs(2, std::vector<double>(terminal->face_groups_.size(), 0));
+  
   // Accumulate beliefs for each face group
   for (int pl = 0; pl < 2; pl++) {
     for (int face_group_index = 0; face_group_index < terminal->face_groups_.size(); ++face_group_index) {
@@ -998,18 +1007,34 @@ auto *terminal = open_spiel::down_cast<LiarsDicePublicStateContext *>(context);
       }
     }
   }
+  
+  // Precompute cumulative sums from each position to the end
+  std::vector<std::vector<double>> cumsum_from(2, std::vector<double>(terminal->face_groups_.size() + 1, 0.0));
+  for(int pl = 0; pl < 2; pl++) {
+    for(int i = terminal->face_groups_.size() - 1; i >= 0; --i) {
+      cumsum_from[pl][i] = cumsum_from[pl][i + 1] + face_beliefs[pl][i];
+    }
+  }
+  
   // Compute values for each face group
   for (int pl = 0; pl < 2; pl++) {
     for (int face_group_index = 0; face_group_index < terminal->face_groups_.size(); ++face_group_index) {
+      int threshold = terminal->bid_.first - face_group_index;
+      
+      // Sum of beliefs where (face_belief_index + face_group_index >= terminal->bid_.first)
+      // means face_belief_index >= threshold
+      double sum_above = (threshold >= 0 && threshold < terminal->face_groups_.size()) 
+                          ? cumsum_from[1-pl][threshold] 
+                          : (threshold < 0 ? cumsum_from[1-pl][0] : 0.0);
+      
+      // Sum of beliefs where face_belief_index < threshold
+      double sum_below = cumsum_from[1-pl][0] - sum_above;
+      
+      // Final value: sum_above - sum_below = 2*sum_above - total
+      double value = terminal->utilities_[pl] * (sum_above - sum_below);
+      
       for(int roll_index : terminal->face_groups_[face_group_index]) {
-        state->values[pl][roll_index] = 0.0;
-        for(int face_belief_index = 0; face_belief_index < face_beliefs[1-pl].size(); ++face_belief_index) {
-          if(face_belief_index + face_group_index >= terminal->bid_.first) {
-            state->values[pl][roll_index] += terminal->utilities_[pl] * face_beliefs[1-pl][face_belief_index];
-          } else {
-            state->values[pl][roll_index] -= terminal->utilities_[pl] * face_beliefs[1-pl][face_belief_index];
-          }
-        }
+        state->values[pl][roll_index] = value;
       }
     }
   }
