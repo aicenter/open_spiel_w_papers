@@ -1,5 +1,4 @@
-# Revisiting Game Representations: The Hidden Costs of Efficiency in Sequential Decision-making Algorithms
-
+# Revisiting Game Representations: The~Hidden Efficiency of Imperfect-Information Game Solvers
 
 ## Abstract
 
@@ -23,3 +22,4 @@ Then:
     $ cd open_spiel_public_state_cfr/open_spiel/papers_with_code/public_state_cfr
     $ ./my_main
 ```
+

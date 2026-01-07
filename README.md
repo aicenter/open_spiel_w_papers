@@ -1,3 +1,4 @@
+This is openspiel with some code for specific papers in the   ``open_spiel/papers_with_code`` directory.
 
 # OpenSpiel: A Framework for Reinforcement Learning in Games
 
