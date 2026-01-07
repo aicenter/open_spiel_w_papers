@@ -35,6 +35,22 @@ int POT_SIZE = 200;
 namespace open_spiel {
 namespace papers_with_code {
 namespace {
+
+// Strips the "cc|cc|cc|" betting history prefix from subgame infostates
+// so they match the EFG-CFR solver's infostate format (which starts at river)
+// Transforms: [Sequences: cc|cc|cc|cr300...] -> [Sequences: |||cr300...]
+std::string StripBettingPrefix(const std::string& infostate) {
+  const std::string prefix = "cc|cc|cc|";
+  const std::string replacement = "|||";
+  size_t pos = infostate.find(prefix);
+  if (pos != std::string::npos) {
+    std::string result = infostate;
+    result.replace(pos, prefix.length(), replacement);
+    return result;
+  }
+  return infostate;
+}
+
 void UpdateChanceReaches(std::vector<double> &chance_reaches,
                          const algorithms::PokerData &poker_data,
                          const std::vector<int> &cards) {
@@ -87,10 +103,7 @@ std::pair<std::shared_ptr<Subgame>, algorithms::PokerData> MakeSubgame(std::stri
   // Deal board card (River)
   state->ApplyAction(cards[4]);
 
-  std::cout << state->ToString() << "\n";
-
   universal_poker::logic::CardSet card_set(cards);
-  std::cout << card_set.ToString() << "\n";
 
   std::shared_ptr<Observer> infostate_observer =
   game->MakeObserver(kInfoStateObsType, {});
@@ -172,7 +185,6 @@ std::pair<int, int> UniversalPokerRiverCFRPokerSpecificLinear(int iterations, bo
       best_response.bandits() =
           MakeResponseBandits(out->trees, separated_policies[1 - player]);
       best_response.RunSimultaneousIterations(1);
-      std::cout << best_response.RootValues() << "\n";
       nash_conv += best_response.RootValues()[player];
     }
     std::cout << "Exploitability: " << nash_conv / 2 << "\n";
@@ -233,7 +245,6 @@ UniversalPokerRiverCFRPokerSpecificQuadratic(int iterations, bool run_exploitabi
       best_response.bandits() =
           MakeResponseBandits(out->trees, separated_policies[1 - player]);
       best_response.RunSimultaneousIterations(1);
-      std::cout << best_response.RootValues() << "\n";
       nash_conv += best_response.RootValues()[player];
     }
     std::cout << "Exploitability: " << nash_conv / 2 << "\n";
@@ -257,7 +268,7 @@ std::pair<int, int> UniversalPokerRiverCFREfg(int iterations, bool run_exploitab
       rng, pot_size, board_cards, uniform_reaches);
 
   auto start = std::chrono::high_resolution_clock::now();
-  algorithms::CFRSolverBase solver(*game, false, false, true);
+  algorithms::CFRSolverBase solver(*game, false, true, true);
   auto end = std::chrono::high_resolution_clock::now();
   auto setup_duration =
       std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -295,10 +306,13 @@ std::pair<int, int> UniversalPokerRiverCFREfg(int iterations, bool run_exploitab
         algorithms::InfostateNode *node =
             subgame_solver.subgame()->trees[player]->decision_infostate(id);
         const std::string &infostate = node->infostate_string();
-        if(solver.InfoStateValuesTable().find(infostate) != solver.InfoStateValuesTable().end()) {
-          std::cout << "setting policy" << std::endl;
+        // Strip the "cc/cc/cc/" prefix to match EFG-CFR solver's format
+        const std::string stripped_infostate = StripBettingPrefix(infostate);
+        if(solver.InfoStateValuesTable().find(stripped_infostate) != solver.InfoStateValuesTable().end()) {
+          // Get policy using the stripped infostate (EFG-CFR format)
           ActionsAndProbs infostate_policy =
-              fixed_policy->GetStatePolicy(infostate);
+              fixed_policy->GetStatePolicy(stripped_infostate);
+          // Set policy using the original infostate (subgame format)
           separated_policies[player].SetStatePolicy(infostate, infostate_policy);
         }
       }
@@ -313,7 +327,6 @@ std::pair<int, int> UniversalPokerRiverCFREfg(int iterations, bool run_exploitab
       best_response.bandits() =
           MakeResponseBandits(out->trees, separated_policies[1 - player]);
       best_response.RunSimultaneousIterations(1);
-      std::cout << best_response.RootValues() << "\n";
       nash_conv += best_response.RootValues()[player];
     }
     std::cout << "Exploitability: " << nash_conv / 2 << "\n";
@@ -337,7 +350,7 @@ std::pair<int, int> UniversalPokerRiverCFREfgHashed(int iterations, bool run_exp
       rng, pot_size, board_cards, uniform_reaches);
 
   auto start = std::chrono::high_resolution_clock::now();
-  algorithms::CFRSolverBase solver(*game, false, false, true, true);
+  algorithms::CFRSolverBase solver(*game, false, true, true, true);
   auto end = std::chrono::high_resolution_clock::now();
   auto setup_duration =
       std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -375,10 +388,11 @@ std::pair<int, int> UniversalPokerRiverCFREfgHashed(int iterations, bool run_exp
         algorithms::InfostateNode *node =
             subgame_solver.subgame()->trees[player]->decision_infostate(id);
         const std::string &infostate = node->infostate_string();
-        if(solver.InfoStateValuesTable().find(infostate) != solver.InfoStateValuesTable().end()) {
+        const std::string stripped_infostate = StripBettingPrefix(infostate);
+        if(solver.InfoStateValuesTable().find(stripped_infostate) != solver.InfoStateValuesTable().end()) {
           ActionsAndProbs infostate_policy =
-              fixed_policy->GetStatePolicy(infostate);
-              separated_policies[player].SetStatePolicy(infostate, infostate_policy);
+              fixed_policy->GetStatePolicy(stripped_infostate);
+          separated_policies[player].SetStatePolicy(infostate, infostate_policy);
         }
       }
     }
@@ -392,7 +406,6 @@ std::pair<int, int> UniversalPokerRiverCFREfgHashed(int iterations, bool run_exp
       best_response.bandits() =
           MakeResponseBandits(out->trees, separated_policies[1 - player]);
       best_response.RunSimultaneousIterations(1);
-      std::cout << best_response.RootValues() << "\n";
       nash_conv += best_response.RootValues()[player];
     }
     std::cout << "Exploitability: " << nash_conv / 2 << "\n";
