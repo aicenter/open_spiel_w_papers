@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=amd
+#SBATCH --partition=amdfast
 
 # RCI cluster modules
 ml Clang/12.0.1-GCCcore-10.3.0
