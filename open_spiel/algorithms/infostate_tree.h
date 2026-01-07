@@ -663,15 +663,11 @@ MakeLiarsDiceInfostateTrees(const std::unique_ptr<State> &start_state,
         roll_counts[roll_string]++;
       }
 
-      std::cout << "roll_strings: " << absl::StrJoin(roll_strings, ", ") << std::endl;
-
       std::vector<double> chance_reach_probs(roll_strings.size(), 0);
 
       for (int i = 0; i < roll_strings.size(); i++) {
         chance_reach_probs[i] = static_cast<double>(roll_counts[roll_strings[i]]) / num_possible_rolls;
       }
-
-      std::cout << "chance_reach_probs: " << absl::StrJoin(chance_reach_probs, ", ") << std::endl;
 
       RecursivelyBuildLiarsDiceTree(
           std::vector<InfostateNode *>(roll_strings.size(), root_.get()),
