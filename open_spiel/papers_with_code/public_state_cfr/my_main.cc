@@ -13,9 +13,7 @@
 // limitations under the License.
 #include "open_spiel/abseil-cpp/absl/flags/flag.h"
 #include "open_spiel/abseil-cpp/absl/flags/parse.h"
-#include "algorithms/best_response.h"
 #include "algorithms/cfr.h"
-#include "algorithms/expected_returns.h"
 #include "algorithms/tabular_exploitability.h"
 #include "infostate_tree_br.h"
 #include "open_spiel/algorithms/infostate_tree.h"
@@ -24,7 +22,6 @@
 #include "subgame.h"
 
 #include <iostream>
-#include <fstream>
 
 std::string POKER_GAME_NAME = "universal_poker(betting=nolimit,numPlayers=2,numRounds=4,blind=100 50,firstPlayer=2 1 1 1,"
                      "numSuits=4,numRanks=13,numHoleCards=2,numBoardCards=0 3 1 1,stack=20000 20000,bettingAbstraction=fcpa)";
@@ -666,11 +663,18 @@ int main(int argc, char **argv) {
   bool run_exploitability = absl::GetFlag(FLAGS_exploitability);
 
   std::cout << "Running " << game_name << " with " << iterations << " iterations and " << runs << " runs" << std::endl;
-  std::cout << "Running PSCFR with linear evaluator: " << run_pscfr_linear << std::endl;
-  std::cout << "Running PSCFR with quadratic evaluator: " << run_pscfr_quadratic << std::endl;
-  std::cout << "Running EFG-CFR: " << run_efgcfr_normal << std::endl;
-  std::cout << "Running EFG-CFR with cached structure: " << run_efgcfr_cached << std::endl;
-  std::cout << "Running exploitability: " << run_exploitability << std::endl;
+  std::vector<std::string> enabled_algos;
+  if (run_pscfr_linear) enabled_algos.push_back("PSCFR-linear");
+  if (run_pscfr_quadratic) enabled_algos.push_back("PSCFR-quadratic");
+  if (run_efgcfr_normal) enabled_algos.push_back("EFG-CFR");
+  if (run_efgcfr_cached) enabled_algos.push_back("EFG-CFR-cached");
+  if (run_exploitability) enabled_algos.push_back("exploitability");
+  std::cout << "Running: ";
+  for (size_t i = 0; i < enabled_algos.size(); i++) {
+    std::cout << enabled_algos[i];
+    if (i < enabled_algos.size() - 1) std::cout << ", ";
+  }
+  std::cout << std::endl;
 
   std::string game_class;
 
