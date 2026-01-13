@@ -172,6 +172,7 @@ struct Subgame {
   std::shared_ptr<Observer> public_observer;
   std::vector<std::shared_ptr<algorithms::InfostateTree>> trees;
   std::vector<PublicState> public_states;
+  std::unordered_map<std::string, int> public_state_id_map;
 
   Subgame(std::shared_ptr<const Game> game, int max_moves);
   Subgame(std::shared_ptr<const Game> game,
@@ -188,7 +189,7 @@ struct Subgame {
  private:
   void MakePublicStates();
   void MakeBeliefsAndValues();
-  PublicState* GetPublicState(const Observation& public_observation,
+  PublicState* GetPublicState(const std::string &public_observation_string, const Observation& public_observation,
                               PublicStateType state_type);
   PublicState* GetPublicState(Observation& public_observation,
                               PublicStateType state_type,
@@ -256,6 +257,19 @@ struct GeneralPokerTerminalPublicStateContext final : public PublicStateContext 
   explicit GeneralPokerTerminalPublicStateContext(const PublicState &state);
 };
 
+struct GoofspielPublicStateContext final : public PublicStateContext {
+  std::vector<std::vector<double>> utilities_;
+  std::vector<std::vector<std::vector<int>>> belief_map_;
+  explicit GoofspielPublicStateContext(const PublicState &state);
+};
+
+struct LiarsDicePublicStateContext final : public PublicStateContext {
+  std::pair<int, int> bid_;
+  std::vector<double> utilities_;
+  std::vector<std::vector<int>> face_groups_;
+  explicit LiarsDicePublicStateContext(const PublicState &state);
+};
+
 class GeneralPokerTerminalEvaluatorLinear : public PublicStateEvaluator {
  public:
   std::unique_ptr<PublicStateContext> CreateContext(
@@ -304,6 +318,24 @@ class PokerTerminalEvaluatorLinear final : public PublicStateEvaluator {
   std::vector<int> hand_strengths_;
 };
 
+class GoofspielTerminalEvaluator final : public PublicStateEvaluator {
+  public:
+   std::unique_ptr<PublicStateContext> CreateContext(
+       const PublicState& state) const override;
+   void EvaluatePublicState(
+       PublicState* state, PublicStateContext* context) const override;
+  private:
+ };
+
+ class LiarsDiceTerminalEvaluator final : public PublicStateEvaluator {
+  public:
+   std::unique_ptr<PublicStateContext> CreateContext(
+       const PublicState& state) const override;
+   void EvaluatePublicState(
+       PublicState* state, PublicStateContext* context) const override;
+  private:
+ };
+
 // -- Terminal evaluator -------------------------------------------------------
 
 struct TerminalPublicStateContext final : public PublicStateContext {
@@ -323,6 +355,8 @@ class TerminalEvaluator final : public PublicStateEvaluator {
 };
 
 std::shared_ptr<PublicStateEvaluator> MakePokerTerminalEvaluator(algorithms::PokerData poker_data, std::vector<int> cards);
+std::shared_ptr<PublicStateEvaluator> MakeGoofspielTerminalEvaluator();
+std::shared_ptr<PublicStateEvaluator> MakeLiarsDiceTerminalEvaluator();
 std::shared_ptr<PublicStateEvaluator> MakeTerminalEvaluator();
 std::shared_ptr<PublicStateEvaluator> MakeDummyEvaluator();
 // CFR evaluator that makes a large number of iterations.

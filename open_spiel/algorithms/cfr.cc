@@ -208,8 +208,6 @@ CFRSolverBase::CFRSolverBase(const Game &game, bool alternating_updates,
   }
   cfr_root_state_ = std::make_shared<CfrState>(*root_state_);
   InitializeInfostateNodes(*root_state_, *cfr_root_state_);
-//  std::cout << "Game has " << states_ << " states.\n";
-//  std::cout << "Game has " << InfoStateValuesTable().size() << " infostates.\n";
 }
 
 CFRSolverBase::CFRSolverBase(std::shared_ptr<const Game> game,
@@ -735,6 +733,9 @@ void CFRInfoStateValues::ApplyRegretMatching() {
   double sum_positive_regrets = 0.0;
 
   for (int aidx = 0; aidx < num_actions(); ++aidx) {
+    if(std::abs(cumulative_regrets[aidx]) < 1e-12) {
+      cumulative_regrets[aidx] = 0;
+    }
     if (cumulative_regrets[aidx] > 0) {
       sum_positive_regrets += cumulative_regrets[aidx];
     }

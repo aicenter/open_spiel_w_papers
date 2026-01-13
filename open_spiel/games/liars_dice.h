@@ -53,6 +53,8 @@ enum BiddingRule {
 
 class LiarsDiceGame;
 
+class LiarsDiceObserver;
+
 class LiarsDiceState : public State {
  public:
   explicit LiarsDiceState(std::shared_ptr<const Game> game, int total_num_dice,
@@ -90,13 +92,13 @@ class LiarsDiceState : public State {
     }
   }
 
- protected:
-  void DoApplyAction(Action action_id) override;
-
   // Get the quantity and face of the bid from an integer. The format of the
   // return depends on the bidding rule.
   // The bids starts at 0 and go to total_dice*dice_sides-1 (inclusive).
   std::pair<int, int> UnrankBid(int bid) const;
+
+ protected:
+  void DoApplyAction(Action action_id) override;
 
   // Dice outcomes: first indexed by player, then by dice number
   std::vector<std::vector<int>> dice_outcomes_;
@@ -105,6 +107,7 @@ class LiarsDiceState : public State {
   std::vector<int> bidseq_;
 
  private:
+  friend class LiarsDiceObserver;
   void ResolveWinner();
 
   // Return the bidding rule used by the game.
@@ -143,6 +146,9 @@ class LiarsDiceGame : public Game {
   std::vector<int> ObservationTensorShape() const override;
   int MaxGameLength() const override;
   int MaxChanceNodesInHistory() const override;
+  std::shared_ptr<Observer> MakeObserver(
+    absl::optional<IIGObservationType> iig_obs_type,
+    const GameParameters& params) const override;
 
   // Returns the maximum among how many dice each player has. For example,
   // if player 1 has 3 dice and player 2 has 2 dice, returns 3.
